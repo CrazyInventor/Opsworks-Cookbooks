@@ -26,16 +26,23 @@
 # deploy all applications
 node[:opsworks][:applications].each do |application|
 
-	Chef::Log.info("Deploying application #{application[:slug_name]}")
+	Chef::Log.info("Deploy application #{application[:slug_name]}")
 
-	# update id_rsa key
-	file "/var/www/.ssh/id_rsa" do
-		content node[:deploy][application[:slug_name]][:scm][:ssh_key]
+	# update id_rsa key	
+	Chef::Log.info("Write SSH Key")
+
+	# write the actual key to file
+	template "/var/www/.ssh/id_rsa" do
+		source 'ssh_key.erb'
+		mode '0600'
 		owner "www-data"
 		group "www-data"
-		mode 00600
-		action :create
+		variables(
+			:key => node[:deploy][application[:slug_name]][:scm][:ssh_key]
+		)
 	end
+
+	Chef::Log.info("Create app directory")
 
 	# create a directory to host the application
 	directory "/srv/www/#{application[:slug_name]}" do
@@ -46,15 +53,32 @@ node[:opsworks][:applications].each do |application|
 		recursive true
 	end
 
+	Chef::Log.info("Sync git repo to app directory")
+
 	# Sync github repo
-	git "/srv/www/#{application[:slug_name]}" do
-		repository node[:deploy][application[:slug_name]][:scm][:repository]
-		user "www-data"
-		group "www-data"
-		reference "master"
-		action :sync
+	unless node[:deploy][application[:slug_name]][:scm][:revision].nil?
+		Chef::Log.info("Syncing branch #{node[:deploy][application[:slug_name]][:scm][:revision]}")
+		git "/srv/www/#{application[:slug_name]}" do
+			repository repository node[:deploy][application[:slug_name]][:scm][:repository]
+			user "www-data"
+			group "www-data"
+			reference node[:deploy][application[:slug_name]][:scm][:revision]
+			action :sync
+		end
+	else
+		Chef::Log.info("Syncing branch master")
+		git "/srv/www/#{application[:slug_name]}" do
+			repository repository node[:deploy][application[:slug_name]][:scm][:repository]
+			user "www-data"
+			group "www-data"
+			reference "master"
+			action :sync
+		end
 	end
+
 	
+	Chef::Log.info("Write environment file")
+
 	# environment variables
 	template "/srv/www/#{application[:slug_name]}/.env" do
 		source 'env.erb'
@@ -65,6 +89,8 @@ node[:opsworks][:applications].each do |application|
 			:env => node[:deploy][application[:slug_name]][:environment_variables]
 		)
 	end
+
+	Chef::Log.info("Create Nginx site config")
 
 	# create virtual host config for nginx
 	template "/etc/nginx/sites-available/#{application[:slug_name]}" do
@@ -78,6 +104,8 @@ node[:opsworks][:applications].each do |application|
 			:slug_name => application[:slug_name]
 		)
 	end
+
+	Chef::Log.info("Enable Nginx site config")
 
 	# enable virtual host
 	link "/etc/nginx/sites-enabled/#{application[:slug_name]}" do
@@ -94,6 +122,8 @@ node[:opsworks][:applications].each do |application|
 
 		Chef::Log.info("Deploying SSL configuration for #{application[:slug_name]}")
 
+		Chef::Log.info("Write SSL key")
+
 		#write ssl key
 		file "/var/www/ssl/#{application[:slug_name]}.key" do
 			content node[:deploy][application[:slug_name]][:ssl_certificate_key]
@@ -102,6 +132,9 @@ node[:opsworks][:applications].each do |application|
 			mode 00600
 			action :create
 		end
+
+		Chef::Log.info("Write SSL certificate")
+
 		#write ssl certificate
 		file "/var/www/ssl/#{application[:slug_name]}.pem" do
 			content node[:deploy][application[:slug_name]][:ssl_certificate]
@@ -110,6 +143,10 @@ node[:opsworks][:applications].each do |application|
 			mode 00600
 			action :create
 		end
+
+
+		Chef::Log.info("Write SSL key")
+
 		#write ssl virtual host file
 		template "/etc/nginx/sites-available/#{application[:slug_name]}_ssl" do
 			source 'nginx_site_ssl.erb'
@@ -122,6 +159,9 @@ node[:opsworks][:applications].each do |application|
 				:slug_name => application[:slug_name]
 			)
 		end
+
+		Chef::Log.info("Create Nginx SSL site config")
+		
 		# enable virtual host
 		link "/etc/nginx/sites-enabled/#{application[:slug_name]}_ssl" do
 			to "/etc/nginx/sites-available/#{application[:slug_name]}_ssl"
@@ -133,6 +173,14 @@ node[:opsworks][:applications].each do |application|
 		end
 	end
 
+	# disable default host
+	file '/etc/nginx/sites-enabled/default' do
+		only_if { node["nginx_use_default_site"] == false }
+		action :delete
+	end
+
+	Chef::Log.info("Restart Nginx")
+
 	# restart nginx
 	service "nginx" do
 		action :restart
@@ -140,9 +188,13 @@ node[:opsworks][:applications].each do |application|
 
 	# run post deploy commands
 	unless node["post_deploy"]["commands"].empty?
+
 		Chef::Log.info("Executing post deploy commands for application #{application[:slug_name]}")
+		
 		node["post_deploy"]["commands"].each do |cid,command|
+		
 			Chef::Log.info("Executing post deploy command #{cid}")
+		
 			script "post_deploy_command" do
 				interpreter "bash"
 				user "www-data"

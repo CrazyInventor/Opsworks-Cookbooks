@@ -102,7 +102,7 @@ end
 service 'php5-fpm' do
   provider Chef::Provider::Service::Upstart
   supports :restart => true
-  action [ :enable, :start ]
+  action [ :restart ]
 end
 
 #
@@ -116,6 +116,15 @@ user 'www-data' do
 	home '/var/www'
 	shell '/bin/bash'
     action :create
+end
+
+# create user's home directory
+directory '/var/www' do
+	owner 'www-data'
+	group 'www-data'
+	mode '0755'
+	action :create
+	recursive true
 end
 
 # create user's ssl directory
@@ -136,15 +145,6 @@ directory '/var/www/.ssh' do
 	recursive true
 end
 
-# create known_hosts file
-cookbook_file "ssh_known_hosts" do
-	path "/var/www/.ssh/known_hosts"
-    owner 'www-data'
-    group 'www-data'
-    mode 00644
-	action :create
-end
-
 # create user's composer directory
 directory '/var/www/.composer' do
 	owner 'www-data'
@@ -152,18 +152,4 @@ directory '/var/www/.composer' do
 	mode '0755'
 	action :create
 	recursive true
-end
-
-# composer configuration
-unless node["github"]["oauth_token"].empty?
-	# Github Oauth token
-	template "/var/www/.composer/config.json" do
-		source 'composer_config_json.erb'
-		mode '0644'
-		owner "www-data"
-		group "www-data"
-		variables(
-			:oauth_token => node["github"]["oauth_token"]
-		)
-	end
 end

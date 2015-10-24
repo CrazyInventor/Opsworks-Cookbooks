@@ -6,14 +6,16 @@ A small collection of Chef cookbooks to set up funny things on Amazon AWS Opswor
 
 You can create customized servers on AWS Opsworks
 
-## What kind of servers? ##
-
-Right now there is only 1 type of server:
-
-- Nginx with PHP5-FPM and a couple of modules
-
 ## Supported Platforms ##
 
-Ubuntu 14.04
-# opsworks-cookbooks
-# opsworks-cookbooks
+Ubuntu 14.04 (Nothing else was tested)
+
+## Available cookbooks ##
+
+- webserver: Nginx Webserver, PHP5-FPM and a couple of tools to deploy PHP apps
+- selenium: Headless Selenium server running on port 4444
+- geoip: GeoIP Database and tools to update
+
+
+
+
