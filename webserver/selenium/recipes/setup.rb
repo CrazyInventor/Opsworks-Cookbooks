@@ -1,6 +1,6 @@
 #
-# Cookbook Name:: geoip
-# Recipe:: config
+# Cookbook Name:: selenium
+# Recipe:: setup
 #
 # Copyright (C) 2015 David Schneider
 #
@@ -23,35 +23,61 @@
 # THE SOFTWARE.
 #
 
-# Write config file for GeoIP
-unless node["geoip"]["UserId"].empty?
-	# Github Oauth token
-	template "/usr/local/etc/GeoIP.conf" do
-		source 'geoip_conf.erb'
-		mode '0644'
-		owner "root"
-		group "root"
-		variables(
-			:UserId => node["geoip"]["UserId"],
-			:LicenseKey => node["geoip"]["LicenseKey"],
-			:ProductIds => node["geoip"]["ProductIds"]
-		)
-	end
+#
+# Java, virtual screen, and Firefox
+#
+
+# default-jre
+package 'default-jre' do
+  action :install
 end
 
-# Update GeoIP databases
-script "run_geoipupdate" do
-	interpreter "bash"
-	user "root"
-	cwd "/usr/local/share"
+# xvfb a.k.a. virtual screen
+package 'xvfb' do
+  action :install
+end
+
+# firefox
+package 'firefox' do
+  action :install
+end
+
+# run virtual screen on server start
+cron 'on_start_run_xvfb' do
+	minute  '@reboot'
+	hour    ''
+	day     ''
+	month   ''
+	weekday ''
+	action :create
+	command "sh -c 'Xvfb :99 -ac -screen 0 1024x768x8 > /tmp/xvfb.log 2>&1 &'"
+end
+
+#
+# Selenium
+#
+
+# create selenium control script
+cookbook_file "selenium_init_script" do
+	manage_symlink_source true
+	path "/etc/init.d/selenium"
+	owner 'root'
+	group 'root'
+	mode '0755'
+	action :create
+end
+
+# download and prepare selenium server, then restart
+bash 'selenium_setup' do
 	code <<-EOH
-		geoipupdate
-	EOH
+	    mkdir /usr/lib/selenium
+		cd /usr/lib/selenium
+		wget #{node["selenium"]["url"]}
+		ln -s #{node["selenium"]["file"]} selenium-server-standalone.jar
+		mkdir -p /var/log/selenium
+		chmod a+w /var/log/selenium
+		update-rc.d selenium defaults
+		reboot
+    EOH
 end
 
-# Create link to fix path bug
-link '/usr/share/GeoIP/GeoIPRegion.dat' do
-  to '/usr/local/share/GeoIP/GeoIPRegion.dat'
-  link_type :symbolic 
-  :create
-end

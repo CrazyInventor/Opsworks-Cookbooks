@@ -1,6 +1,6 @@
 #
 # Cookbook Name:: geoip
-# Recipe:: config
+# Recipe:: default
 #
 # Copyright (C) 2015 David Schneider
 #
@@ -23,35 +23,3 @@
 # THE SOFTWARE.
 #
 
-# Write config file for GeoIP
-unless node["geoip"]["UserId"].empty?
-	# Github Oauth token
-	template "/usr/local/etc/GeoIP.conf" do
-		source 'geoip_conf.erb'
-		mode '0644'
-		owner "root"
-		group "root"
-		variables(
-			:UserId => node["geoip"]["UserId"],
-			:LicenseKey => node["geoip"]["LicenseKey"],
-			:ProductIds => node["geoip"]["ProductIds"]
-		)
-	end
-end
-
-# Update GeoIP databases
-script "run_geoipupdate" do
-	interpreter "bash"
-	user "root"
-	cwd "/usr/local/share"
-	code <<-EOH
-		geoipupdate
-	EOH
-end
-
-# Create link to fix path bug
-link '/usr/share/GeoIP/GeoIPRegion.dat' do
-  to '/usr/local/share/GeoIP/GeoIPRegion.dat'
-  link_type :symbolic 
-  :create
-end
